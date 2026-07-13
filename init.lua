@@ -124,7 +124,10 @@ require("lazy").setup({
           icons = { show = { git = true, folder = true, file = true, folder_arrow = true } },
         },
         update_focused_file = { enable = true },      -- follow the active buffer
-        filters = { dotfiles = false },
+        -- Show everything: dotfiles and gitignored paths both stay visible.
+        -- git_ignored defaults to true upstream, which hides build output and
+        -- local-only trees (.claude/skills, target/) from the explorer.
+        filters = { dotfiles = false, git_ignored = false },
         git = { enable = true },
         actions = { open_file = { resize_window = true } },
       })
@@ -168,7 +171,18 @@ require("lazy").setup({
   { "nvim-telescope/telescope.nvim",
     branch = "0.1.x",
     dependencies = "nvim-lua/plenary.nvim",
-    config = function() require("telescope").setup({}) end },
+    config = function()
+      require("telescope").setup({
+        -- Search everything. hidden = dotfiles, no_ignore = ignore .gitignore.
+        -- Gitignored-but-real files (.claude/skills) must be findable; only
+        -- machine-generated trees are cut, since they bury the fuzzy ranking.
+        defaults = { file_ignore_patterns = { "^%.git/", "^target/", "^%.kore/" } },
+        pickers = {
+          find_files = { hidden = true, no_ignore = true },
+          live_grep  = { additional_args = { "--hidden", "--no-ignore" } },
+        },
+      })
+    end },
 
   -- Syntax highlighting is Neovim's built-in `syntax on` (markdown/lua/bash/etc).
   -- nvim-treesitter's master branch is incompatible with nvim 0.12; skipped.
