@@ -22,9 +22,15 @@ local paste_cmd = {
 -- mojibakes UTF-8 (Japanese/emoji) on the way to the clipboard. Read stdin as
 -- UTF-8 explicitly and Set-Clipboard instead. Passed as a bare argv list (no
 -- shell) so the PowerShell $vars survive unexpanded.
+--
+-- Set-Clipboard preserves the LF line endings it is given. Win32 edit controls
+-- break lines on CRLF and ignore a bare LF, so an LF-only clipboard pastes into
+-- Windows apps as a single run of text -- the whole yank is there, but it looks
+-- like only the first line survived. clip.exe converts; Set-Clipboard does not.
+-- Normalize to CRLF on the way out (paste_cmd strips the CRs on the way back in).
 local copy_cmd = {
   'powershell.exe', '-NoProfile', '-Command',
-  '$in = New-Object System.IO.StreamReader([Console]::OpenStandardInput(), [System.Text.UTF8Encoding]::new($false)); Set-Clipboard -Value $in.ReadToEnd()'
+  '$in = New-Object System.IO.StreamReader([Console]::OpenStandardInput(), [System.Text.UTF8Encoding]::new($false)); Set-Clipboard -Value $in.ReadToEnd().Replace("`r`n", "`n").Replace("`r", "`n").Replace("`n", "`r`n")'
 }
 vim.g.clipboard = {
   name = "WslClipboard",
