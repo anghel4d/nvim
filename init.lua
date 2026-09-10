@@ -101,16 +101,6 @@ vim.opt.rtp:prepend(lazypath)
 -- 4. Plugins
 --------------------------------------------------------------------------------
 require("lazy").setup({
-  -- Colorschemes. All load eagerly (lazy = false) so the §9 selector can switch
-  -- between them live. High-contrast light set for readability, plus the previous
-  -- TokyoNight (dark). The active theme is applied in §9, not here.
-  { "folke/tokyonight.nvim", lazy = false, priority = 1000,
-    config = function() require("tokyonight").setup({ style = "night" }) end },
-  { "RRethy/base16-nvim",        lazy = false, priority = 1000 },  -- powers Base16 Dawn
-  { "sainnhe/everforest",        lazy = false, priority = 1000 },
-  { "sainnhe/gruvbox-material",  lazy = false, priority = 1000 },
-  { "NLKNguyen/papercolor-theme", lazy = false, priority = 1000 },
-
   -- Icons (needs a Nerd Font set in the terminal; falls back to text otherwise)
   { "nvim-tree/nvim-web-devicons", lazy = true },
 
@@ -127,7 +117,7 @@ require("lazy").setup({
           group_empty = true,
           highlight_git = true,
           indent_markers = { enable = true },
-          icons = { show = { git = true, folder = true, file = true, folder_arrow = true } },
+          icons = { show = { git = false, folder = false, file = false, folder_arrow = true } },
         },
         update_focused_file = { enable = true },      -- follow the active buffer
         -- Show everything: dotfiles and gitignored paths both stay visible.
@@ -147,6 +137,7 @@ require("lazy").setup({
         options = {
           offsets = { { filetype = "NvimTree", text = "Explorer", separator = true } },
           separator_style = "thin",
+          show_buffer_icons = false,
         },
       })
     end },
@@ -155,8 +146,18 @@ require("lazy").setup({
   { "nvim-lualine/lualine.nvim",
     dependencies = "nvim-tree/nvim-web-devicons",
     config = function()
+      local neutral = {
+        a = { fg = "#b6bac8", bg = "#262b38", gui = "NONE" },
+        b = { fg = "#b6bac8", bg = "#262b38", gui = "NONE" },
+        c = { fg = "#939bac", bg = "#202430", gui = "NONE" },
+      }
       require("lualine").setup({
-        options = { theme = "auto", globalstatus = true },
+        options = {
+          theme = { normal = neutral, insert = neutral, visual = neutral,
+            replace = neutral, command = neutral, inactive = neutral },
+          globalstatus = true, icons_enabled = false,
+          component_separators = "|", section_separators = "",
+        },
         sections = {
           lualine_a = { "mode" },
           lualine_b = { "branch", "diff", "diagnostics" },
@@ -166,8 +167,7 @@ require("lazy").setup({
           lualine_z = {
             "location",
             -- subtle, always-visible hint for the cheatsheet key (bottom-right)
-            { function() return "F1 help" end,
-              color = { fg = "#c0caf5", bg = "#3b4261", gui = "italic" } },
+            function() return "F1 help" end,
           },
         },
       })
@@ -328,7 +328,7 @@ local cheats = {
     { "Ctrl-\\ Ctrl-n", "terminal -> normal mode" },
   } },
   { "Appearance", {
-    { "<leader>ut",     "pick colour theme (persists)" },
+    { "<leader>ut",     "reload C64 Brutalist theme" },
   } },
   { "General", {
     { "<leader>w",      "save" },
@@ -389,110 +389,10 @@ map("n", "<F1>",      show_cheats, { desc = "Cheatsheet" })
 map("n", "<leader>?", show_cheats, { desc = "Cheatsheet" })
 
 --------------------------------------------------------------------------------
--- 9. Theme manager: high-contrast light themes + a persistent live selector.
---    <leader>ut opens a picker; the choice is written to disk and reloaded on
---    startup. Default is DF_Light (high-contrast parchment). DF_Dark and
---    TokyoNight stay selectable. Plugins load eagerly (§4) so apply() just works.
+-- 9. One active theme, shared with Vim; old saved selections cannot override it.
 --------------------------------------------------------------------------------
--- DF_Dark: the exact classic Dwarf Fortress ncurses palette (the CGA/IBM 16
--- colours from DF's default colors.txt) fitted to base16's slots. Authentic:
--- black ground, light-gray default text, saturated bright ANSI accents. Same 16
--- colours as the Alacritty df_dark.toml.
--- READABILITY REORDER (same 16 df values; only which base16 slot holds each is shuffled --
--- df's blue #0000ff is near-invisible on black, so it is pulled off code and parked on comments):
---   base0D functions/headings  : #0000ff blue -> #00ffff cyan    -- code now reads teal
---   base0C support/regex/quotes: #00ffff cyan -> #808080 gray
---   base03 comments/invisibles : #808080 gray -> #0000ff blue    -- blue = the least-visible slot
--- The df_dark / df_light base16 tables are GENERATED from the canonical source in
--- ~/workspace/dfthemes (build.py writes df_base16.lua into this config dir). Edit
--- the JSON there and rerun build.py; the comment blocks here document the mapping.
--- Loaded via a guarded dofile so a missing generated file can't brick startup.
-local ok_df, df_base16 = pcall(dofile, vim.fn.stdpath("config") .. "/df_base16.lua")
-if not ok_df or type(df_base16) ~= "table" then
-  vim.notify("df_base16.lua missing -- run ~/workspace/dfthemes/build.py", vim.log.levels.WARN)
-  df_base16 = { df_light = {}, df_dark = {} }
+local function apply_theme()
+  vim.cmd.colorscheme("c64-brutalist")
 end
-local df_dark = df_base16.df_dark or {}
-
--- DF_Light: DF rendered on parchment and stone (my imagination). Same earthy
--- hues inverted to a high-contrast light ground: aged-paper bg, ink text, every
--- accent dark enough to read on light. The daily-driver default. Matches df_light.toml.
-local df_light = df_base16.df_light or {}
-
--- base16-nvim derives terminal_color_* from base16 slots, which drops the light
--- ground (base00) into ANSI 0 ("black") on light themes -- so ansi:black text in a
--- hosted TUI (e.g. Claude Code in :terminal) renders near-white. These _term tables
--- are the canonical DF ANSI palette (df-*.json ansi+bright, the same 16 the terminals
--- use); set_terminal_ansi applies them AFTER setup() so every surface matches.
-local df_light_term = df_base16.df_light_term or {}
-local df_dark_term  = df_base16.df_dark_term  or {}
-local function set_terminal_ansi(pal)
-  for i = 0, 15 do
-    if pal[i + 1] then vim.g["terminal_color_" .. i] = pal[i + 1] end
-  end
-end
-
-local themes = {
-  { key = "df_light", label = "DF_Light  (parchment DF, high-contrast)", apply = function()
-      vim.o.background = "light"
-      require("base16-colorscheme").setup(df_light)
-      set_terminal_ansi(df_light_term)               -- fix ANSI 0/7/15 inversion (see above)
-      vim.g.colors_name = "df-light"                 -- so lualine/tooling can see it
-  end },
-  { key = "df_dark", label = "DF_Dark  (authentic Dwarf Fortress, dark)", apply = function()
-      vim.o.background = "dark"
-      require("base16-colorscheme").setup(df_dark)
-      set_terminal_ansi(df_dark_term)                -- canonical ANSI (base16 slots use bright accents)
-      vim.g.colors_name = "df-dark"
-  end },
-  { key = "everforest", label = "Everforest Light", apply = function()
-      vim.o.background = "light"
-      vim.g.everforest_background = "hard"           -- highest-contrast variant
-      vim.g.everforest_better_performance = 1
-      vim.cmd.colorscheme("everforest")
-  end },
-  { key = "papercolor", label = "PaperColor Light", apply = function()
-      vim.o.background = "light"
-      vim.cmd.colorscheme("PaperColor")
-  end },
-  { key = "gruvbox", label = "Gruvbox Light  (hard)", apply = function()
-      vim.o.background = "light"
-      vim.g.gruvbox_material_background = "hard"      -- max contrast, sandy
-      vim.g.gruvbox_material_better_performance = 1
-      vim.cmd.colorscheme("gruvbox-material")
-  end },
-  { key = "tokyonight", label = "TokyoNight  (previous, dark)", apply = function()
-      vim.o.background = "dark"
-      vim.cmd.colorscheme("tokyonight")
-  end },
-}
-
-local theme_file = vim.fn.stdpath("state") .. "/theme"
-local function by_key(k) for _, t in ipairs(themes) do if t.key == k then return t end end end
-
-local function set_theme(t, persist)
-  local ok, err = pcall(t.apply)
-  if not ok then vim.notify("theme '" .. t.key .. "' failed: " .. tostring(err), vim.log.levels.ERROR); return end
-  if persist then
-    pcall(vim.fn.writefile, { t.key }, theme_file)
-    vim.notify("theme: " .. t.label)
-  end
-end
-
--- default: DF_Light (themes[1]); a saved choice overrides it.
-local function load_theme()
-  local saved
-  local ok, lines = pcall(vim.fn.readfile, theme_file)
-  if ok and lines and lines[1] and lines[1] ~= "" then saved = lines[1] end
-  set_theme(by_key(saved) or themes[1], false)
-end
-
-local function pick_theme()
-  vim.ui.select(themes, {
-    prompt = "Colour theme",
-    format_item = function(t) return t.label end,
-  }, function(choice) if choice then set_theme(choice, true) end end)
-end
-
-map("n", "<leader>ut", pick_theme, { desc = "Pick colour theme" })
-load_theme()
+map("n", "<leader>ut", apply_theme, { desc = "Reload C64 Brutalist theme" })
+apply_theme()
